@@ -1,0 +1,1 @@
+from .effnetv2_model import EffNetV2Model
