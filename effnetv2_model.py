@@ -520,7 +520,7 @@ class Head(tf.keras.layers.Layer):
         return outputs
 
 
-class EffNetV2Model(tf.keras.Model):
+class EffNetV2(tf.keras.Model):
     """A class implements tf.keras.Model.
 
       Reference: https://arxiv.org/abs/1807.11626
@@ -530,6 +530,7 @@ class EffNetV2Model(tf.keras.Model):
                  model_name='efficientnetv2-s',
                  model_config=None,
                  num_classes=None,
+                 include_top=True,
                  name=None):
         """Initializes an `Model` instance.
 
@@ -551,28 +552,33 @@ class EffNetV2Model(tf.keras.Model):
             cfg.model.num_classes = num_classes
         self.cfg = cfg
         self._mconfig = cfg.model
+        self.include_top = include_top
         self.endpoints = None
         self._build()
 
     @classmethod
-    def from_pretrained(cls, model_name):
+    def from_pretrained(cls, model_name, num_classes=None, include_top=True):
         
-        if '-21k' in model_name:
-            num_classes = 21843
-        else:
-            num_classes = 1000
+        pretrained_num_classes = 1000
+        if ('-21k' in model_name) and ('-ft1k' not in model_name):
+            pretrained_num_classes = 21843
 
         # build keras model
         base_name = model_name.strip('-ft1k').strip('-21k')
-        model = cls(base_name, num_classes=num_classes)
+        model = cls(base_name, num_classes=pretrained_num_classes, include_top=include_top)
         inputs = tf.random.uniform([1, 224, 224, 3])
         endpoints = model(inputs)
-        
+
         # load weights
-        dwonload_path = f'{DOWNLOAD_DIR}/{model_name}.h5'
+        if include_top:
+            file_name = f'{model_name}.h5'
+            download_path = f'{DOWNLOAD_DIR}/{file_name}'
+        else:
+            file_name = f'{model_name}_notop.h5'
+            download_path = f'{DOWNLOAD_DIR}/{file_name}'
         weights_path = tf.keras.utils.get_file(
-            model_name,
-            dwonload_path,
+            file_name,
+            download_path,
             cache_subdir='models',
         )
         model.load_weights(weights_path)
@@ -628,13 +634,12 @@ class EffNetV2Model(tf.keras.Model):
         model = tf.keras.Model(inputs=[x], outputs=self.call(x, training=True))
         return model.summary()
 
-    def call(self, inputs, training, features_only=None):
+    def call(self, inputs, training):
         """Implementation of call().
 
         Args:
           inputs: input tensors.
           training: boolean, whether the model is constructed for training.
-          features_only: build the base feature network only.
 
         Returns:
           output tensors.
@@ -675,7 +680,7 @@ class EffNetV2Model(tf.keras.Model):
                                        (reduction_idx, k)] = v
         self.endpoints['features'] = outputs
 
-        if not features_only:
+        if self.include_top:
             # Calls final layers and returns logits.
             outputs = self._head(outputs, training)
             self.endpoints.update(self._head.endpoints)
